@@ -25,7 +25,7 @@ UNIT_NUMBER = "01"
 # <<< LFI-3751 connection <<<
 
 # >>> loop configuration >>>
-INTERVAL_s = 5
+INTERVAL_s = 5 * 60
 print(f"Polling interval = {INTERVAL_s} s.")
 print()
 # <<< loop configuration <<<
