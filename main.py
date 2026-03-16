@@ -19,26 +19,32 @@ print()
 print("----- Wavelength Electronics LFI-3751 temperature controller -> InfluxDB uploader -----")
 print()
 
+# >>> App configuration >>>
+INTERVAL_s = 5 * 60
+print(f"Polling interval = {INTERVAL_s} s.")
+print()
+# <<< App configuration <<<
+
+
+# >>> load IMAQ config >>>
+import tomllib
+with open("imaq_config/auth.toml", "rb") as f:
+    AUTH = tomllib.load(f)
+# <<< load IMAQ config <<<
+
 # >>> LFI-3751 connection >>>
 SERIAL_PORT = "/dev/ttyUSB0"
 UNIT_NUMBER = "01"
 # <<< LFI-3751 connection <<<
 
-# >>> loop configuration >>>
-INTERVAL_s = 5 * 60
-print(f"Polling interval = {INTERVAL_s} s.")
-print()
-# <<< loop configuration <<<
-
 # >>> InfluxDB configuration >>>
 import influxdb_client
 from influxdb_client.client.write_api import SYNCHRONOUS
-INFLUXDB_URL = "http://synology-nas:8086"
-INFLUXDB_TOKEN = "xixuoRzjm51D2WQh5uHnqjd0H28NJuaKpiHAmmSzEUlqgUhxRl0A01Na6-a_gX6BENlP3xx8FEoGP-qMx0Xrow=="  # sinclairgroup_influxdb's admin token
-INFLUXDB_ORG = "sinclairgroup"
-INFLUXDB_BUCKET = "imaq"
-INFLUXDB_CLIENT = influxdb_client.InfluxDBClient(url=INFLUXDB_URL, token=INFLUXDB_TOKEN, org=INFLUXDB_ORG)
+# Initialize the InfluxDB Client and the Write API
+INFLUXDB_CLIENT = influxdb_client.InfluxDBClient(**AUTH["influxdb"])
 INFLUXDB_WRITE_API = INFLUXDB_CLIENT.write_api(write_options=SYNCHRONOUS)
+INFLUXDB_QUERY_API = INFLUXDB_CLIENT.query_api()
+INFLUXDB_ORG = AUTH["influxdb"]["org"]; INFLUXDB_BUCKET = AUTH["influxdb"]["bucket"]
 print(f"InfluxDB client initialized for org='{INFLUXDB_ORG}', bucket='{INFLUXDB_BUCKET}'.")
 print()
 # <<< InfluxDB configuration <<<
