@@ -21,6 +21,7 @@ print()
 
 # >>> App configuration >>>
 INTERVAL_s = 5 * 60
+EX_THRESHOLD = 3
 print(f"Polling interval = {INTERVAL_s} s.")
 print()
 # <<< App configuration <<<
@@ -67,7 +68,7 @@ print(lfi3751_client)
 print()
 
 il = 0
-
+ex_count: int = 0
 print("Entering main polling loop...")
 print()
 
@@ -75,57 +76,69 @@ while True:
     msg_il = f"Iteration {il}: "
 
     try:
-        temperature_set_C = lfi3751_client.get_temperature_setpoint_C()
-        temperature_C = lfi3751_client.get_actual_temperature_C()
-        current_A = lfi3751_client.get_te_current_A()
-        voltage_V = lfi3751_client.get_te_voltage_V()
-
-    except (serial.SerialException, OSError, LFI3751Error) as ex:
-        log_error(msg_il)
-        log_error(f"LFI-3751 query failed: {type(ex).__name__}: {ex}")
-        log_warn("Re-establishing LFI-3751 connection and retrying once...")
-
         try:
-            lfi3751_client.close()
-        except Exception:
-            pass
+            temperature_set_C = lfi3751_client.get_temperature_setpoint_C()
+            temperature_C = lfi3751_client.get_actual_temperature_C()
+            current_A = lfi3751_client.get_te_current_A()
+            voltage_V = lfi3751_client.get_te_voltage_V()
 
-        lfi3751_client = connect_lfi3751()
-        log_warn("LFI-3751 reconnection succeeded.")
+        except (serial.SerialException, OSError, LFI3751Error) as ex:
+            log_error(msg_il)
+            log_error(f"LFI-3751 query failed: {type(ex).__name__}: {ex}")
+            log_warn("Re-establishing LFI-3751 connection and retrying once...")
 
-        temperature_set_C = lfi3751_client.get_temperature_setpoint_C()
-        temperature_C = lfi3751_client.get_actual_temperature_C()
-        current_A = lfi3751_client.get_te_current_A()
-        voltage_V = lfi3751_client.get_te_voltage_V()
+            try:
+                lfi3751_client.close()
+            except Exception:
+                pass
 
-    influxdb_record = {
-        "measurement": "LFI3751_TemperatureController",
-        "tags": {
-            "SN": lfi3751_client.serial_number or "",
-            "version": lfi3751_client.version or "",
-            "source": "RS-232",
-        },
-        "fields": {
-            "TemperatureSet[degC]": temperature_set_C,
-            "Temperature[degC]": temperature_C,
-            "Current[A]": current_A,
-            "Voltage[V]": voltage_V,
-        },
-    }
+            lfi3751_client = connect_lfi3751()
+            log_warn("LFI-3751 reconnection succeeded.")
 
-    INFLUXDB_WRITE_API.write(
-        bucket=INFLUXDB_BUCKET,
-        org=INFLUXDB_ORG,
-        record=influxdb_record,
-    )
+            temperature_set_C = lfi3751_client.get_temperature_setpoint_C()
+            temperature_C = lfi3751_client.get_actual_temperature_C()
+            current_A = lfi3751_client.get_te_current_A()
+            voltage_V = lfi3751_client.get_te_voltage_V()
 
-    log(
-        msg_il
-        + f"TemperatureSet[degC]={temperature_set_C:.3f}, "
-        + f"Temperature[degC]={temperature_C:.3f}, "
-        + f"Current[A]={current_A:.3f}, "
-        + f"Voltage[V]={voltage_V:.3f}"
-    )
+        influxdb_record = {
+            "measurement": "LFI3751_TemperatureController",
+            "tags": {
+                "SN": lfi3751_client.serial_number or "",
+                "version": lfi3751_client.version or "",
+                "source": "RS-232",
+            },
+            "fields": {
+                "TemperatureSet[degC]": temperature_set_C,
+                "Temperature[degC]": temperature_C,
+                "Current[A]": current_A,
+                "Voltage[V]": voltage_V,
+            },
+        }
+
+        INFLUXDB_WRITE_API.write(
+            bucket=INFLUXDB_BUCKET,
+            org=INFLUXDB_ORG,
+            record=influxdb_record,
+        )
+
+        log(
+            msg_il
+            + f"TemperatureSet[degC]={temperature_set_C:.3f}, "
+            + f"Temperature[degC]={temperature_C:.3f}, "
+            + f"Current[A]={current_A:.3f}, "
+            + f"Voltage[V]={voltage_V:.3f}"
+        )
+
+    except Exception as ex:
+        ex_count += 1
+        log_error(msg_il)
+        log_error(
+            f"Error during measurement/upload ({ex_count}/{EX_THRESHOLD}): "
+            f"{type(ex).__name__}: {ex}"
+        )
+        if ex_count >= EX_THRESHOLD:
+            log_error("Exception threshold reached. Raising to supervisor.")
+            raise
 
     time.sleep(INTERVAL_s)
     il += 1
